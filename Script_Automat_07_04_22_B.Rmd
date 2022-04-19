@@ -1,0 +1,118 @@
+---
+title: "Présentation RMarkdown"
+author: "Antoine Castet et Jean-Baptiste Guiffard"
+date: '7 avril 2022'
+output:
+  beamer_presentation:
+    theme: "AnnArbor"
+    colortheme: "dolphin"
+    fonttheme: "structurebold"
+
+---
+
+```{r setup, include=FALSE}
+#Le but de ce "chunk" est de faire en sorte que la valeur par défaut de echo soit False, c'est à dire que les résultats sont affichés mais pas le code.
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r Library, include=FALSE}
+#Ce chunk est consacré à l'ouverture des packages
+library(tidyverse)
+library(wooldridge)
+library(jtools)
+library(fixest)
+library(modelsummary)
+library(table1)
+library(DataExplorer)
+library(ggthemes)
+library(kableExtra)
+library(leaflet)
+library(readxl)
+
+```
+
+```{r chargement et traitement des données trade, include=FALSE, warning=FALSE, message=FALSE}
+#Ce chunk est consacré au traitement des données "trade".
+
+data('trade')
+
+gravity_pois1 = fepois(Euros ~ log(dist_km) | Year, trade)
+gravity_pois2 = fepois(Euros ~ log(dist_km) | Origin + Destination + Product + Year, trade)
+gravity_pois3 = fepois(Euros ~ log(dist_km) | Origin + Destination + Product + Year, cluster = "Product", trade)
+
+models <- list()
+models[['Year fe']] <- gravity_pois1
+models[['Several fe']] <- gravity_pois2
+models[['Clustered fe']] <- gravity_pois3
+```
+
+```{r chargement et traitement des données wage1, include=FALSE, warning=FALSE, message=FALSE}
+#Ce chunk est consacré au traitement des données "wage1".
+data('wage1')
+
+# Ajout d'une variable catégorielle "région" avec la fonction mutate du package dplyr : 
+wage1 <- wage1 %>%
+  mutate(region = case_when(
+    northcen == 1 ~ "northcen",
+    south == 1 ~ "south",
+    west == 1 ~ "west"),
+    region = ifelse(is.na(region),'unknown',region))
+
+# Régressions
+reg1 <- lm(lwage ~ educ , wage1)
+reg2 <- lm(lwage ~ exper, wage1)
+reg3 <- lm(lwage ~ tenure, wage1)
+reg4 <- lm(lwage ~ educ + exper , wage1)
+
+# ajout de davantage de controls
+reg5 <- lm(lwage ~ educ + exper + female + nonwhite + married, wage1)
+
+# Avec ajout d'un terme quadratique sur l'expérience
+reg6 <- lm(lwage ~ educ + exper + expersq + female + nonwhite + married, wage1)
+```
+
+
+
+
+## Qu'est ce que RMarkdown ?
+
+- RMarkdown n'est pas disponible nativement au sein de R, mais l'est au sein de RStudio.
+
+- RMarkdown vise à combiner le langage de balisage léger Markdown avec le langage de programmation R.
+
+- RMarkdown permet de créer des rapports Pdf, Word, HTML et également des présentations Beamer et Powerpoint.
+
+## Qu'est ce que Markdown ?
+
+- Créé en 2004 par John Gruber et Aaron Swartz.
+
+- Un langage de balisage léger, dont le but était de créer une syntaxe facile à lire et écrire pour le code HTML. 
+
+- Des règles simples pour formater (mise en gras, italiques...), lister, titrer, créer des tableaux, insérer des liens, etc.
+
+## Compatibilté du code 
+
+- Il existe une très forte compatibilité entre le code permettant la réalisation d'un rapport et celui permettant de réaliser une présentation.
+
+- Les tables et graphiques réalisés dans un rapport peuvent donc être affichés très facilement dans une présentation.
+
+```{r Graph1, message = FALSE, fig.cap="Graphique de densité", out.width = "40%"}
+ggplot(wage1, aes(x = wage)) + 
+  geom_histogram(aes(y =..density..),
+                 breaks = seq(0, 25, by = 1), 
+                 colour = "black", 
+                 fill = "white") +
+  labs(title = "Graphique A", caption="Note : je fais un test") +
+  theme(plot.caption = element_text(hjust = 0))
+```
+
+## Affichage d'une table de régression
+
+```{r Table avec beaucoup de modifications}
+modelsummary(models, 
+                    output = 'markdown',
+                    title = 'Table réalisé pour un rapport RMarkdown.',
+                    stars = c('*' = .1, '**' = .05, '***' = .01),
+                    gof_omit = 'DF|Deviance|R2|AIC|BIC|Log.Lik.')
+```

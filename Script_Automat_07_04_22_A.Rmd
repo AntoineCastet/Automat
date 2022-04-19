@@ -1,0 +1,301 @@
+---
+title: "Un exemple de fichier obtenu avec RMarkdown"
+author: "Antoine Castet et Jean-Baptiste Guiffard"
+date: '2022-04-07'
+output:
+  pdf_document: 
+    extra_dependencies: ["flafter"]
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+#Le but de ce "chunk" est de faire en sorte que la valeur par défaut de echo soit False, c'est à dire que les résultats sont affichés mais pas le code.
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r Library, include=FALSE}
+#Ce chunk est consacré à l'ouverture des packages
+library(tidyverse)
+library(wooldridge)
+library(jtools)
+library(fixest)
+library(modelsummary)
+library(table1)
+library(DataExplorer)
+library(ggthemes)
+library(kableExtra)
+library(leaflet)
+library(readxl)
+#library(flextable)
+
+```
+
+
+```{r chargement et traitement des données trade, include=FALSE, warning=FALSE, message=FALSE}
+#Ce chunk est consacré au traitement des données "trade".
+
+data('trade')
+
+gravity_pois1 = fepois(Euros ~ log(dist_km) | Year, trade)
+gravity_pois2 = fepois(Euros ~ log(dist_km) | Origin + Destination + Product + Year, trade)
+gravity_pois3 = fepois(Euros ~ log(dist_km) | Origin + Destination + Product + Year, cluster = "Product", trade)
+
+models <- list()
+models[['Year fe']] <- gravity_pois1
+models[['Several fe']] <- gravity_pois2
+models[['Clustered fe']] <- gravity_pois3
+```
+
+```{r chargement et traitement des données wage1, include=FALSE, warning=FALSE, message=FALSE}
+#Ce chunk est consacré au traitement des données "wage1".
+data('wage1')
+
+# Ajout d'une variable catégorielle "région" avec la fonction mutate du package dplyr : 
+wage1 <- wage1 %>%
+  mutate(region = case_when(
+    northcen == 1 ~ "northcen",
+    south == 1 ~ "south",
+    west == 1 ~ "west"),
+    region = ifelse(is.na(region),'unknown',region))
+
+# Régressions
+reg1 <- lm(lwage ~ educ , wage1)
+reg2 <- lm(lwage ~ exper, wage1)
+reg3 <- lm(lwage ~ tenure, wage1)
+reg4 <- lm(lwage ~ educ + exper , wage1)
+
+# ajout de davantage de controls
+reg5 <- lm(lwage ~ educ + exper + female + nonwhite + married, wage1)
+
+# Avec ajout d'un terme quadratique sur l'expérience
+reg6 <- lm(lwage ~ educ + exper + expersq + female + nonwhite + married, wage1)
+```
+
+# Introduction à RMarkdown
+
+Le but de cette présentation est de présenter RMarkdown qui est proposé par RStudio. L'objetif de RMarkdown est de faciliter la production de document (rapport, présentations, article de recherche, thèse...). 
+
+RMarkdown permet de produire des fichiers en format PDF (grâce à Latex), Word, HTML et également des présentations du style "beamer" (Latex) et Powerpoint.
+
+
+## Affichage des tables statistiques
+Dans un premier temps, nous allons simplement afficher les tables statistiques que nous avions réalisé la dernière fois. Pour cela, il suffit de créer un "chunk" et d'y insérer la commande permettant la création de la table.
+
+### Affichage de la première table
+
+La première table est réalisée grâce au package Table1 et les données proviennent de wage1, la base de données de Woolridge.
+
+```{r Table1 print}
+# tableau de statistiques descriptives (avec le package table1) :
+table1(~wage + educ + nonwhite + female |region, data=wage1)
+```
+
+Ce premier tableau donne quelques statistiques descriptives 'standards' (moyenne, écart-type, médianne, min et max) pour quatre variables (wage, educ, nonwhite et female) et par sous-groupes de régions : north-east, south, west and unknown. La dernière colonne donne les mêmes statistiques descriptives mais sur l'ensemble de l'échantillon (N=526).
+
+Nous pouvons d'ailleurs automatiser dans le texte l'insertion d'éléments qui auraient été calculés ou auraient subi un traitement en amont grâce au code r dans un "chunk".
+```{r Table1, include=FALSE}
+# tableau de statistiques descriptives (avec le package table1) :
+stat_des_reg <- table1(~wage + educ + nonwhite + female |region, data=wage1)
+n_sample_south <- parse_number(as.data.frame(stat_des_reg)[1,3])
+n_sample_all <- parse_number(as.data.frame(stat_des_reg)[1,6])#fonction dans tidyr
+mean_wage_all <- word(as.data.frame(stat_des_reg)[3,6], 1)#fonction avec stringr
+
+```
+
+Par exemple, je peux faire appel à une chaîne de caractères ou un nombre que j'ai préalablement sélectionné dans une cellule d'un tableau de données. Par exemple, je peux dire que le nombre de personnes dans la base de données domiciliés dans le sud des Etats-Unis s'élève à `r n_sample_south` individus.
+
+Ou bien que la moyenne du salaire horaire pour l'ensemble de l'échantillon est de `r mean_wage_all`\$.
+
+Je peux même inclure un calcul directement dans mon texte et ne voir apparaître que le résultat. Par exemple, je peux me demander quelle est la part de l'échantillon vivant dans le sud des Etats-Unis : `r round(n_sample_south/n_sample_all*100, digits=1)` % de mon échantillon vivent dans le sud des Etats-Unis. 
+
+
+### Affichage de la deuxième table
+
+La deuxième table est réalisée grâce au package Dataexplorer et les données proviennent de wage1, la base de données de Wooldridge.
+```{r Table2}
+# Summary des données avec DataExplorer (davantage d'informations par variables)
+datasummary_skim(wage1)
+```
+
+# Affichage des graphiques
+Il est possible, très facilement, de combiner le texte et les graphiques avec RMarkdown. L'avantage est que les graphiques sont réalisés au moment de la conception du fichier. Si, la base de données a évolué, les graphiques évolueront également sans avoir besoin de modifier le code ou de recharger l'image (tout comme les statistiques descriptives que nous avons précédemment étudiées).
+
+J'ajoute le premier graphique.
+
+```{r Graph1, message = FALSE, fig.cap="Graphique de densité", out.width = '70%'}
+ggplot(wage1, aes(x = wage)) + 
+  geom_histogram(aes(y =..density..),
+                 breaks = seq(0, 25, by = 1), 
+                 colour = "black", 
+                 fill = "white") +
+  labs(title = "Graphique A", caption="Note : Il est possible d'ajouter des notes et même de choisir leur emplacement.") +
+  theme(plot.caption = element_text(hjust = 0))
+```
+Ce graphe est un histogramme produit avec le package ggplot (package inclus dans la suite de packages tidyverse). Comme nous l'avons vu la séance précédente, nous disposons d'une multitude d'options de réprésentation. Ici, nous avons fait une représentation simple, nous avons diminué la taille du graphique lorsqu'il apparaît dans le texte.
+
+J'ai également la possibilité de mettre deux graphiques côtes à côtes. Pour cela, il suffit de préciser que l'on souhaite que chaque graphique prenne la moitié de la page (out.width = "50%").
+
+
+```{r compare_2graphs, fig.show="hold", message = FALSE, out.width = "50%", fig.cap="Graphiques de densité"}
+# Histogramme et comparaison à une loi normale
+ggplot(wage1, aes(x = wage)) + 
+  geom_histogram(aes(y =..density..),
+                 breaks = seq(0, 25, by = 1), 
+                 colour = "black", 
+                 fill = "white") +
+  labs(title = "Graphique A", caption="Note : Il est possible d'ajouter des notes et même de choisir leur emplacement.") +
+  theme(plot.caption = element_text(hjust = 0))
+
+ggplot(wage1, aes(x = wage)) + 
+  geom_histogram(aes(y =..density..),
+                 breaks = seq(0, 25, by = 0.5), 
+                 colour = "white", 
+                 fill = "blue") +
+  stat_function(fun = dnorm, args = list(mean = mean(wage1$wage), sd = sd(wage1$wage))) +
+  labs(title = "Graphique B", caption="Note : Il est possible d'ajouter des notes et même de choisir leur emplacement.") +
+  theme(plot.caption = element_text(hjust = 0))
+```
+Pour cette deuxième figure, à laquelle on peut faire référence directement dans le texte comme la figure \ref{fig:compare_2graphs}, nous comparons deux histogrammes : l'un très basique et l'autre plus élaboré avec des couleurs et la représentation d'une fonction de densité de la loi normale avec les paramètres moyenne et écart-type du niveau de salaire horaire sur l'échantillon dont nous disposons.
+
+Le même principe s'applique lorsque l'on souhaite afficher 3 graphiques côtes à côtes.
+
+```{r Table5, message = FALSE, out.width = "33%", fig.show="hold", fig.cap="Graphiques education-salaire"}
+ggplot(wage1, aes(x=educ, y=wage)) +
+  geom_point(size=2, shape=17)
+
+ggplot(wage1, aes(x=educ, y=wage)) +
+  geom_point(size=2, shape=24, colour='black', fill="red") 
+
+ggplot(wage1, aes(x=educ, y=wage)) +
+  geom_point(size=2, shape=24, colour='black', fill="red") +
+  ggtitle('Scatter plot AUTOMAT')+
+  theme_classic()+
+  labs(caption ="Source: Wooldridge",
+       x='Education (in year)',
+       y='Hourly Wage (in $)')
+```
+Ces 3 graphes sont des nuages de points avec le niveau de salaire horaire en dollars en ordonnées et le nombre d'années d'éducation en abscisse, pour lesquels nous avons modifié progressivement les options graphiques.
+
+Lorsque RMarkdown produit un fichier pdf, le logiciel se base sur le language Latex. Il est donc possible d'insérer des commandes Latex, d'ajouter des options Latex et de profiter des avantages mais aussi des défauts de Latex, notamment le placement des figures pouvant ne pas correspondre exactement à ce que l'on souhaite. Pour éviter au maximum de voir une figure se placer à un endroit non souhaité, nous avons ajouté une option au début du script : "extra_dependencies: ["flafter"]" (+ option pour les tableaux de régression)
+
+# Graphiques Education-salaire avec droite de régression 
+```{r Table6, message = FALSE, out.width = "50%"}
+# ajouter droite de régression au ggplot
+ggplot(wage1, aes(x=educ, y=wage)) +
+  geom_point(size=1) +
+  geom_smooth(method=lm, se=FALSE)
+# ajouter intervalle de confiance
+ggplot(wage1, aes(x=educ, y=wage)) +
+  geom_point(size=1) +
+  geom_smooth(method=lm, se=TRUE)
+```
+Nous reprenons la représentation des nuages de points, en ajoutant cette fois-ci une droite de régression, celui de droite inclut les intervalles de confiance.
+
+
+# Graphiques des coefficients des modèles estimés précédemment
+```{r Table7, message = FALSE, out.width = "50%"}
+# représentation graphique coefficients (coef plots)
+plot_summs(reg1, reg2, reg3) 
+
+plot_summs(reg1, reg2, reg3) + coord_flip()
+	
+plot_summs(reg1, reg4, reg5, reg6, coefs = c("educ"))
+
+# ajouter les noms des modèles
+
+plot_summs(reg1, reg4, reg5, reg6, coefs = c("educ"),
+           model.names = c('Simple','Experience', 'Controls', 'Quadratic term'))
+```
+Dans Rmarkdown, ajouter des cellules ou une numérotation est très simple : 
+
+1. Le premier graphe est un coeff plot des trois premiers modèles que nous avons estimé (des régressions linéaires simples), avec à chaque fois des variables différentes pour expliquer le niveau de salaire horaire.
+
+2. Le deuxième graphe est aussi un coeff plot pour lequel :
+
+> - Nous avons intégré les mêmes modèles ;
+> - Nous avons inversé le sens de représentation des coefficients (de l'horizontal vers le vertical).
+
+3. Le graphe 3 vient compiler différente régressions avec pour principal objectif de voir l'évolution d'un coefficient d'intérêt : le nombre d'années d'éducation.
+
+4. Dans le graphe 4, nous nommons les modèles en fonction de leur spécification : une régression simple, l'ajout du nombre d'années d'expérience, quelques controls, et enfin un terme quadratique pour détecter une potentielle relation non-linéaire entre nombre d'années d'expérience et revenu.
+
+
+# Affichage des tables de régressions
+
+Tout d'abord, on peut afficher une table sans aucune modification, en utilisant le package modelsummary.
+```{r Table sans modification, results='asis'}
+modelsummary(models, stars = c('*' = .1, '**' = .05, '***' = .01)) %>%
+  kable_styling(latex_options = "hold_position")
+                    
+```
+Ici, on a un exemple d'un chunk que l'on peut aussi intégrer directement dans le texte. 
+
+Puis, une table un petit peu modifiée en combinant modelsummary et quelques spécificités du packages KableExtra (uniquement compatible avec Latex).
+
+```{r Table avec modifications, results='asis'}
+tab <- modelsummary(models, 
+                    output = 'kableExtra',
+                    title = 'Table avec quelques modifications.',
+                    stars = c('*' = .1, '**' = .05, '***' = .01),
+                    gof_omit = 'DF|Deviance|R2|AIC|BIC|Log.Lik.')
+
+#Je l'ajuste et l'affiche.
+tab %>%
+  footnote(general = c("Note: Il est possible d'ajouter des notes."),
+  general_title = "",
+  footnote_as_chunk = T,
+  threeparttable = T) %>%
+  kable_styling(latex_options = "hold_position")
+  
+  
+```
+
+Puis, une table très modifiée en combinant modelsummary et KableExtra (uniquement compatible avec Latex).
+
+```{r Table avec beaucoup de modifications, results='asis'}
+tab <- modelsummary(models, 
+                    output = 'kableExtra',
+                    title = 'Table avec beaucoup de modifications.',
+                    stars = c('*' = .1, '**' = .05, '***' = .01),
+                    gof_omit = 'DF|Deviance|R2|AIC|BIC|Log.Lik.')
+
+#Je l'ajuste et l'affiche.
+tab %>%
+  footnote(general = c("Note: Il est possible d'ajouter des notes."),
+  general_title = "",
+  footnote_as_chunk = T,
+  threeparttable = T) %>%
+  row_spec(3, bold = T) %>%
+  column_spec(2, strikeout = T) %>%
+  row_spec(2, bold = T, color = "white", background = "blue") %>%
+  row_spec(0, angle = 45)  %>%
+  add_header_above(c(" " = 1, "Models" = 3))%>%
+  kable_styling(latex_options = "hold_position")
+```
+
+
+
+Pour cette dernière table, voici les modifications apportées : 
+
+> - Une note a été ajoutée en-dessous du tableau ; 
+> - Un nom de ligne en gras ; 
+> - Une colonne pour la quelle le contenu des cellules a été barré ;
+> - Une ligne entière en bleue, avec le texte en blanc et gras ; 
+> - Le nom des colonnes incliné à 45° ;
+> - Donner un nom commun aux trois colonnes.
+
+# Affichage d'une carte des laboratoires IRD.
+
+Pour finir, nous représentons la localisation des laboratoires affiliés à l'IRD en région parisienne. En sortant un document sous format HTML, et grâce au package leaflet nous pouvons obtenir une carte interactive.
+
+```{r Carte}
+setwd('C:/Users/jbguiffard/OneDrive - Université Paris 1 Panthéon-Sorbonne/COURS_DISPENSES/AUTOMAT/INTRO_R')
+Automat <- read_excel("Automat.xlsx")
+
+leaflet(data = Automat) %>% 
+addTiles() %>% 
+addMarkers(lng=~Longitude, lat=~Latitude, label=~as.character(Labo), popup=~as.character(Labo))
+```
+
+
