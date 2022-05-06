@@ -1,0 +1,168 @@
+---
+title: "Introduction à la cartographie, aux méthodes d’extraction et application avec R."
+author: "Antoine Castet et Jean-Baptiste Guiffard"
+date: '5 mai 2022'
+output:
+  beamer_presentation:
+    theme: "AnnArbor"
+    colortheme: "dolphin"
+    fonttheme: "structurebold"
+  header-includes:
+  - \usepackage{pdfpages}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+setwd("C:/Users/acastet/Dropbox/Automat_05_05/")
+#setwd("C:/Users/jbguiffard/Dropbox/Automat_05_05/")
+```
+
+
+# Introduction
+![Réprésenter une sphère à plat.](Representation.png){width=50%}
+
+
+# Les systèmes de coordonnés (Datum).
+![La Terre n'est pas (parfaitement) ronde.](Terre.jpg){width=50%}
+
+
+# Les systèmes de coordonnés (Datum).
+![Exemple de datum avec ellipsoïde local.](Local.png){width=60%}
+
+# Les systèmes de coordonnés (Datum).
+![Exemple de datum avec ellipsoïde global.](Global.png){width=60%}
+
+
+# Les systèmes de coordonnés (Datum).
+- Datum : Peut être utilisé localement (RGF93 = EPSG4171, France ou NAD 1983, USA) ou globalement (WGS84 = EPSG4326).
+- EPSG =  European Petroleum Survey Group, liste des systèmes de coordonnées géoéréférencées de projection.
+
+\begin{figure}
+\includegraphics[width=0.45\linewidth]{WGS84.png}
+\includegraphics[width=0.45\linewidth]{RGF93.png}
+\caption{\label{fig:Project} Zone des datums WGS84 et RGF93 selon EPSG.io.}
+\end{figure}
+
+# Les systèmes de projection.
+- Projection : Cylindrique (Pseudo-Mercator, EPSG3857) et conique (Lambert, EPSG:2154).
+
+![Représentation graphique des deux grands types de projection.](Projection.png){width=75%}
+
+
+# Les systèmes de projection.
+
+\begin{figure}
+\includegraphics[width=0.425\linewidth]{Cylindrique.png}
+\includegraphics[width=0.525\linewidth]{Cylindrique2.png}
+\caption{\label{fig:Project} Projections cylindriques conforme de Mercator et équivalente de Peters.}
+\end{figure}
+
+# Les systèmes de projection.
+![Projection conique conforme de Lambert centrée sur la France](Lambert.png){width=85%}
+
+
+
+# Les types de données géographiques : les vecteurs.
+
+- Vectoriel : Shapefile (shp, dbf, shx), GeoPackage...
+
+
+![Forme des différents vecteurs.](Vecteur.png){width=100%}
+
+# Les types de données géographiques : les rasters
+
+- Raster : GeoTIFF, GeoPackage...
+- Un raster est simplement une image dont chaque pixel qui la compose représente une valeur.
+
+![Exemple d'un raster](Raster.png){width=70%}
+
+# Les logiciels de cartographie.
+
+- QGIS (gratuit, facile, point and click, compatible Python et R...)
+
+- ArcGis (payant, similaire à QGIS, données exclusives...)
+
+- R (gratuit, prise en main plus complexe, facilite le traitement des données...)
+
+- Recommandation : combiner QGIS et R.
+
+
+# L'obtention de données cartographiques (rasters et vecteurs).
+
+- NASA, Socioeconomic data and application center : https://sedac.ciesin.columbia.edu/
+
+- Global Administrative Areas : https://gadm.org/
+
+- Earth Engine Data Catalog : https://developers.google.com/earth-engine/datasets
+
+- DHS/Afrobarometer/enquêtes microéconomique...
+
+
+# La création de données cartographiques (rasters).
+
+- Géolocaliser des lieux avec Geocode by Awesome Table ou ggmap.
+
+- Tracer des lignes, des polygones, des points...
+
+
+# Brève introduction à la cartographie dans R.
+
+A travers un exemple, voir comment manipuler des données cartographique et produire de jolies cartes avec R.
+
+# Le package sf
+Un package qui date de 2016 publié par Edzer Pebesma qui vise à regrouper les fonctionnalités de trois packages plus anciens sur R (sp, rgeos et rgdal).
+
+## La forme d'un objet sf
+C'est un data.frame avec une colonne spéciale nommée "geometry" qui contient les coordonnées d'un polygone. 
+
+![Exemple extrait objet sf](sf_object.png){width=100%}
+
+# Les commandes les plus basiques
+
+```{r, echo=TRUE, eval=FALSE}
+mydata.shp <- st_read('NOM_DATA_MAP.shp')
+head(mydata.shp) 
+plot(mydata.shp)
+plot(mydata.shp['var1'])
+
+merge(mydata.shp, other_df, by="ID")
+```
+
+
+# D'autres commandes intéressantes (I)
+
+Connaître la projection et la modifier
+```{r,  echo=TRUE, eval=FALSE}
+st_crs(mydata.shp)
+mydata.shp_reproj <- st_transform(mydata.shp, 2154) #Lambert-93
+```
+
+Obtenir les centroïdes des polygones 
+```{r,  echo=TRUE, eval=FALSE}
+mydata_centroids.shp <- st_centroid(mydata.shp)
+
+```
+
+Calculer des distances
+```{r,  echo=TRUE, eval=FALSE}
+matrice_distance_centroids <- st_distance(x = mydata_centroids.shp, 
+                                          y = mydata_centroids.shp)
+
+```
+
+# D'autres commandes intéressantes (II)
+Unifier/agréger des polygones
+
+```{r,  echo=TRUE, eval=FALSE}
+mydata_union.shp <- st_union(mydata.shp)
+```
+
+Créer un buffer ou zone tampon
+```{r,  echo=TRUE, eval=FALSE}
+mydata_buffer.shp <- st_buffer(x = mydata_union.shp, 
+                               dist = 1000)
+
+```
+
+
